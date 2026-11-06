@@ -1,0 +1,20 @@
+# Frontend (not tracked yet)
+client/
+
+# macOS
+.DS_Store
+
+# Go build output
+bin/
+*.exe
+*.test
+*.out
+
+# Env / secrets
+.env
+.env.*
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
