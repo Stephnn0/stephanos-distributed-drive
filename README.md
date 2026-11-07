@@ -51,9 +51,70 @@ go run ./services/metadata/cmd/server
 The frontend application users interact with. It talks to the backend through the API gateway.
 
 ### `infra/`
-Infrastructure as code:
-- **Terraform**: provisions cloud resources (GKE cluster, networking, databases, storage buckets, API gateway)
-- **Kubernetes**: manifests for deploying, scaling and configuring each service
+Infrastructure as code, split into two layers that change at different speeds:
+
+- **Terraform** creates the **platform**: GKE cluster, networking, Cloud SQL (Postgres), storage buckets, API Gateway, Artifact Registry, and IAM. Changes rarely.
+- **Kubernetes** manifests describe the **apps** running on that platform: Deployments, Services, autoscaling, and config for each service. Changes on every deploy.
+
+```
+infra/
+├── terraform/
+│   ├── modules/          # reusable building blocks (gke/, cloudsql/, buckets/, ...)
+│   └── envs/
+│       ├── dev/          # dev environment: small cluster
+│       └── prod/         # prod environment: larger, more replicas
+└── k8s/
+    ├── base/             # one folder per service, shared by all environments
+    │   ├── metadata/     #   deployment.yaml, service.yaml, hpa.yaml
+    │   ├── storage/
+    │   └── sync/
+    └── overlays/         # per-environment changes (Kustomize)
+        ├── dev/          #   e.g. 1 replica, debug logging
+        └── prod/         #   e.g. 3+ replicas, more CPU
+```
+
+Kubernetes config uses **Kustomize** (built into `kubectl`): `base/` holds the shared manifests and each overlay changes only what differs for its environment.
+
+## Deployment
+
+Pushing to GitHub does not change anything in the cloud by itself. A CI/CD pipeline applies changes, and nobody applies them by hand from a laptop.
+
+### Infrastructure changes (Terraform)
+1. Open a pull request that changes `infra/terraform/`
+2. CI (GitHub Actions / Cloud Build) runs `terraform plan` and posts the result on the PR
+3. The plan is reviewed like code
+4. On merge to `main`, CI runs `terraform apply`
+5. Terraform state is stored in a GCS bucket, so CI and developers share one view of what exists
+
+### App changes (Go services)
+1. Merge code to `main`
+2. CI runs tests, builds a container image, and pushes it to Artifact Registry
+3. The new image is deployed to GKE, either by CI running `kubectl apply`, or with **GitOps** (Argo CD / Config Sync), where a tool in the cluster keeps it in sync with `infra/k8s/` in Git
+4. Kubernetes performs a rolling update: new pods pass health checks before old pods shut down gracefully
+
+### Roadmap
+1. Run everything locally on Kubernetes with `kind`, using `infra/k8s/`
+2. Write Terraform for a dev environment on Google Cloud
+3. Automate both with GitHub Actions
+
+## Generating Code from Protos
+
+The `.proto` files in `proto/` are compiled into Go code under `backend/gen/` with [buf](https://buf.build). Generated code is never edited by hand.
+
+One-time setup (macOS):
+```bash
+brew install go bufbuild/buf/buf
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+export PATH="$PATH:$(go env GOPATH)/bin"   # add to ~/.zshrc
+```
+
+Then, from the repo root:
+```bash
+make proto      # lint + generate + go mod tidy
+make lint       # lint only
+make breaking   # check for breaking API changes against main
+```
 
 ## MVP Services
 

@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package drive.metadata.v1;
+
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/Stephnn0/stephanos-distributed-drive/backend/gen/drive/metadata/v1;metadatav1";
+
+// MetadataService is the source of truth for what exists in the drive:
+// files, folders, ownership and permissions.
+//
+// Every call must carry the caller's user ID in the "x-user-id" gRPC
+// metadata header (temporary, until real auth is added). Callers only
+// ever see their own folders.
+//
+// "folders/root" can be used anywhere a folder name is expected, and
+// refers to the caller's root folder.
+service MetadataService {
+  // Creates a folder. If parent is empty, creates the caller's root
+  // folder (each user has exactly one).
+  rpc CreateFolder(CreateFolderRequest) returns (Folder);
+
+  // Gets a folder by resource name.
+  rpc GetFolder(GetFolderRequest) returns (Folder);
+
+  // Lists the folders directly inside a parent folder, oldest first.
+  rpc ListFolders(ListFoldersRequest) returns (ListFoldersResponse);
+
+  // Renames and/or moves a folder.
+  rpc UpdateFolder(UpdateFolderRequest) returns (Folder);
+
+  // Moves a folder to the trash (soft delete) and returns it with
+  // delete_time set. Trashed folders are hidden from Get, List and Update.
+  rpc DeleteFolder(DeleteFolderRequest) returns (Folder);
+}
+
+// A folder that can contain files and other folders.
+message Folder {
+  // Resource name. Format: folders/{folder_id}
+  // Set by the server; ignored on create.
+  string name = 1;
+
+  // Resource name of the parent folder. Empty for the user's root folder.
+  string parent = 2;
+
+  // Human-readable name shown in the UI, e.g. "Taxes 2026".
+  // 1 to 255 characters.
+  string display_name = 3;
+
+  // User ID of the owner. Set by the server from the caller's identity.
+  string owner_id = 4;
+
+  // When the folder was created. Set by the server.
+  google.protobuf.Timestamp create_time = 5;
+
+  // When the folder was last changed. Set by the server.
+  google.protobuf.Timestamp update_time = 6;
+
+  // When the folder was moved to the trash. Unset if it is not trashed.
+  google.protobuf.Timestamp delete_time = 7;
+}
+
+// Request message for MetadataService.CreateFolder.
+message CreateFolderRequest {
+  // Resource name of the parent folder. Format: folders/{folder_id}
+  // Empty to create the caller's root folder.
+  string parent = 1;
+
+  // The folder to create. Only display_name is read.
+  Folder folder = 2;
+}
+
+// Request message for MetadataService.GetFolder.
+message GetFolderRequest {
+  // Resource name of the folder. Format: folders/{folder_id}
+  string name = 1;
+}
+
+// Request message for MetadataService.ListFolders.
+message ListFoldersRequest {
+  // Resource name of the folder whose children to list.
+  // Format: folders/{folder_id}
+  string parent = 1;
+
+  // Maximum number of folders to return. Default 50, maximum 1000.
+  int32 page_size = 2;
+
+  // next_page_token from a previous call, to get the following page.
+  string page_token = 3;
+}
+
+// Response message for MetadataService.ListFolders.
+message ListFoldersResponse {
+  // The folders in this page.
+  repeated Folder folders = 1;
+
+  // Pass as page_token to get the next page. Empty on the last page.
+  string next_page_token = 2;
+}
+
+// Request message for MetadataService.UpdateFolder.
+message UpdateFolderRequest {
+  // The folder to update. folder.name identifies it.
+  Folder folder = 1;
+
+  // Fields to update: "display_name" (rename) and/or "parent" (move).
+  // If empty, every non-empty field among those two is updated.
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// Request message for MetadataService.DeleteFolder.
+message DeleteFolderRequest {
+  // Resource name of the folder. Format: folders/{folder_id}
+  string name = 1;
+}

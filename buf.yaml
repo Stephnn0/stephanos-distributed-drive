@@ -1,0 +1,15 @@
+# buf configuration: where the protos live and which rules they must follow.
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+  except:
+    # We follow Google's API conventions (AIP-133), where Create methods
+    # return the resource itself (e.g. Folder) instead of a CreateXResponse.
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
+breaking:
+  use:
+    - FILE

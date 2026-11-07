@@ -1,0 +1,11 @@
+# Code generation: turns proto/ into Go code under backend/gen/.
+version: v2
+plugins:
+  # Messages (structs, serialization)
+  - local: protoc-gen-go
+    out: backend/gen
+    opt: paths=source_relative
+  # gRPC client and server interfaces
+  - local: protoc-gen-go-grpc
+    out: backend/gen
+    opt: paths=source_relative
